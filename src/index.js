@@ -766,7 +766,4 @@ async function main() {
   await runDockerContainer(config);
 }
 
-// Run the CLI if this is the main module
-if (import.meta.url === `file://${process.argv[1]}`) {
-  main();
-}
+main();

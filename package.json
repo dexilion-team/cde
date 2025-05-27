@@ -1,8 +1,10 @@
 {
   "name": "@dexilion/cde",
-  "version": "1.0.0",
+  "version": "1.0.3",
+  "description": "Command line tool for Dexilion Common Line Development Environment",
+  "main": "src/index.js",
   "bin": {
-    "cde": "src/index.js"
+    "@dexilion/cde": "src/index.js"
   },
   "type": "module",
   "author": {
