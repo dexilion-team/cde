@@ -1,0 +1,17 @@
+{
+  "name": "@dexilion/cde",
+  "version": "1.0.0",
+  "bin": {
+    "cde": "src/index.js"
+  },
+  "type": "module",
+  "author": {
+    "name": "Dexilion Team",
+    "email": "github-cde@dexilion.com"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/dexilion-team/cde.git"
+  },
+  "license": "MIT"
+}
