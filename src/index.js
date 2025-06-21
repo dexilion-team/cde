@@ -85,11 +85,12 @@ function commandExists(command) {
 function checkDockerSocketAccess(socketPath) {
   try {
     const dockerCommand = commandExists('docker') ? 'docker' : 'podman';
-//console.log([dockerCommand, 'run', `-v ${socketPath}:/var/run/docker.sock`, '-it', 'alpinelinux/docker-cli', 'docker', 'version', '--format', 'json'].join(' '));
+
     let result = spawnSync(dockerCommand, [
         'run', 
+        '--rm',
         '-v', `${socketPath}:/var/run/docker.sock`,
-        '-it', 'alpinelinux/docker-cli', 
+        'alpinelinux/docker-cli', 
         'docker', 'version', '--format', 'json'
       ],
       {
@@ -97,7 +98,7 @@ function checkDockerSocketAccess(socketPath) {
         timeout: 3000, // 3 seconds timeout
       }
     );
-//console.log(result.stderr.toString());
+
     if (result.status === 0) {
       return true;
     }
