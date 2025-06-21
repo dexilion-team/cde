@@ -75,60 +75,47 @@ function getConfig() {
 }
 
 /**
- * Checks if a Docker socket path exists and is accessible
+ * Checks if a Docker socket path exists and is accessible by testing Docker daemon connectivity
  * @param {string} socketPath - Path to the Docker socket
  * @returns {boolean} - True if socket is accessible, false otherwise
  */
 function checkDockerSocketAccess(socketPath) {
   try {
-    // Check if the socket exists
-    if (!existsSync(socketPath)) {
-      return false;
-    }
-
-    let validDockerSocketFound = false;
-    if (getOS() === 'windows' && socketPath.includes('pipe')) {
-      // For named pipes, existence check is sufficient as they're handled by Windows
-      validDockerSocketFound = true;
-    } else {
-      try {
-        accessSync(socketPath, constants.R_OK | constants.W_OK);
-        validDockerSocketFound = true; // Socket is accessible
-      } catch (_) { }
-    }
-
-    if (!validDockerSocketFound) {
-      return false;
-    }
-
     // Set DOCKER_HOST environment variable for the test
     const env = { ...process.env };
 
     if (getOS() === 'windows' && socketPath.includes('pipe')) {
       env.DOCKER_HOST = `npipe://${socketPath}`;
     } else {
+      // For Unix sockets, check if the socket file exists first
+      if (!existsSync(socketPath)) {
+        return false;
+      }
       env.DOCKER_HOST = `unix://${socketPath}`;
     }
 
-    // Run a simple docker command to test connectivity
+    // Test connectivity by running a simple docker command
     let result = spawnSync('docker', ['version', '--format', 'json'], {
       env,
-      timeout: 3000,
+      timeout: 5000,
       stdio: 'pipe'
     });
 
-    if (result.error) {
-      result = spawnSync('podman', ['version', '--format', 'json'], {
-        env,
-        timeout: 3000,
-        stdio: 'pipe'
-      });
+    // If docker command succeeded, the socket is accessible
+    if (result.status === 0) {
+      return true;
     }
 
-    return result.status === 0;
-  } catch (accessError) {
-    console.error(`Error accessing Docker socket at ${socketPath}:`, accessError.message);
+    // If docker failed, try podman as fallback
+    result = spawnSync('podman', ['version', '--format', 'json'], {
+      env,
+      timeout: 5000,
+      stdio: 'pipe'
+    });
 
+    return result.status === 0;
+  } catch (error) {
+    // If there's an error running the command, socket is not accessible
     return false;
   }
 }
@@ -140,19 +127,14 @@ function checkDockerSocketAccess(socketPath) {
 function getDockerSocketPath() {
   // Platform-specific default socket paths
   const defaultSocketPaths =
-    getOS() === 'windows' ?
-      [
-        '//./pipe/docker_engine',           // Docker Desktop on Windows
-        '\\\\.\\pipe\\docker_engine',       // Alternative Windows format
-        '//var/run/docker.sock'             // WSL/Linux compatibility layer
-      ] : [
-        '/var/run/docker.sock',             // Standard Unix socket
-        '/run/docker.sock',                 // Alternative location
-        join(homedir(), '.docker/desktop/docker.sock'), // Docker Desktop on macOS
-        '/usr/local/var/run/docker.sock',   // Homebrew Docker on macOS
-        `/run/user/${process.getuid()}/docker.sock`, // User-specific socket on Linux
-        `/run/user/${process.getuid()}/podman/podman.sock` // User-specific Podman socket on Linux
-      ];
+    [
+      '/var/run/docker.sock',             // Standard Unix socket
+      '/run/docker.sock',                 // Alternative location
+      join(homedir(), '.docker/desktop/docker.sock'), // Docker Desktop on macOS
+      '/usr/local/var/run/docker.sock',   // Homebrew Docker on macOS
+      `/run/user/${process.getuid()}/docker.sock`, // User-specific socket on Linux
+      `/run/user/${process.getuid()}/podman/podman.sock` // User-specific Podman socket on Linux
+    ];
 
   for (const socketPath of defaultSocketPaths) {
     if (checkDockerSocketAccess(socketPath)) {
