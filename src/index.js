@@ -1,10 +1,9 @@
 #!/usr/bin/env node
 
 import { spawnSync, spawn } from "child_process";
-import { existsSync, readFileSync, writeFileSync, accessSync, constants } from "fs";
-import { dirname, join } from "path";
-import { fileURLToPath } from "url";
-import { homedir, platform, networkInterfaces } from "os";
+import { existsSync, readFileSync, writeFileSync } from "fs";
+import { join } from "path";
+import { homedir, networkInterfaces } from "os";
 import { createInterface } from "readline";
 
 /**
@@ -16,31 +15,6 @@ function getOS() {
     return "windows";
   }
   return process.platform;
-}
-
-/**
- * Finds the npm project root by searching for package.json
- * @param {string} startPath - Starting directory (defaults to current file directory)
- * @returns {string} - Path to the npm project root
- */
-function findProjectRoot(startPath = dirname(fileURLToPath(import.meta.url))) {
-  let currentPath = startPath;
-
-  while (currentPath !== dirname(currentPath)) {
-    const packageJsonPath = join(currentPath, 'package.json');
-    if (existsSync(packageJsonPath)) {
-      return currentPath;
-    }
-    currentPath = dirname(currentPath);
-  }
-
-  // Check root directory as well
-  const rootPackageJsonPath = join(currentPath, 'package.json');
-  if (existsSync(rootPackageJsonPath)) {
-    return currentPath;
-  }
-
-  throw new Error('No package.json found in any parent directory');
 }
 
 /**
@@ -75,49 +49,62 @@ function getConfig() {
 }
 
 /**
+ * Checks if a command exists and is available in the system PATH
+ * @param {string} command - The command to check for
+ * @returns {boolean} - True if command exists, false otherwise
+ */
+function commandExists(command) {
+  try {
+    let result;
+    
+    if (getOS() === 'windows') {
+      // Windows: use 'where' command
+      result = spawnSync('where', [command], {
+        stdio: 'pipe',
+        timeout: 3000
+      });
+    } else {
+      // Unix/Linux/macOS: use 'which' command
+      result = spawnSync('which', [command], {
+        stdio: 'pipe',
+        timeout: 3000
+      });
+    }
+
+    return result.status === 0;
+  } catch (error) {
+    return false;
+  }
+}
+
+/**
  * Checks if a Docker socket path exists and is accessible by testing Docker daemon connectivity
  * @param {string} socketPath - Path to the Docker socket
  * @returns {boolean} - True if socket is accessible, false otherwise
  */
 function checkDockerSocketAccess(socketPath) {
   try {
-    // Set DOCKER_HOST environment variable for the test
-    const env = { ...process.env };
-
-    if (getOS() === 'windows' && socketPath.includes('pipe')) {
-      env.DOCKER_HOST = `npipe://${socketPath}`;
-    } else {
-      // For Unix sockets, check if the socket file exists first
-      if (!existsSync(socketPath)) {
-        return false;
+    const dockerCommand = commandExists('docker') ? 'docker' : 'podman';
+//console.log([dockerCommand, 'run', `-v ${socketPath}:/var/run/docker.sock`, '-it', 'alpinelinux/docker-cli', 'docker', 'version', '--format', 'json'].join(' '));
+    let result = spawnSync(dockerCommand, [
+        'run', 
+        '-v', `${socketPath}:/var/run/docker.sock`,
+        '-it', 'alpinelinux/docker-cli', 
+        'docker', 'version', '--format', 'json'
+      ],
+      {
+        stdio: 'pipe',
+        timeout: 3000, // 3 seconds timeout
       }
-      env.DOCKER_HOST = `unix://${socketPath}`;
-    }
-
-    // Test connectivity by running a simple docker command
-    let result = spawnSync('docker', ['version', '--format', 'json'], {
-      env,
-      timeout: 5000,
-      stdio: 'pipe'
-    });
-
-    // If docker command succeeded, the socket is accessible
+    );
+//console.log(result.stderr.toString());
     if (result.status === 0) {
       return true;
     }
 
-    // If docker failed, try podman as fallback
-    result = spawnSync('podman', ['version', '--format', 'json'], {
-      env,
-      timeout: 5000,
-      stdio: 'pipe'
-    });
+  } catch { }
 
-    return result.status === 0;
-  } catch (error) {
-    // If there's an error running the command, socket is not accessible
-    return false;
-  }
+  return false;
 }
 
 /**
@@ -132,12 +119,20 @@ function getDockerSocketPath() {
       '/run/docker.sock',                 // Alternative location
       join(homedir(), '.docker/desktop/docker.sock'), // Docker Desktop on macOS
       '/usr/local/var/run/docker.sock',   // Homebrew Docker on macOS
-      `/run/user/${process.getuid()}/docker.sock`, // User-specific socket on Linux
-      `/run/user/${process.getuid()}/podman/podman.sock` // User-specific Podman socket on Linux
+      
     ];
 
+    if (getOS() !== 'windows') {
+      defaultSocketPaths.push(
+        ...[
+          `/run/user/${process.getuid()}/docker.sock`, // User-specific socket on Linux
+          `/run/user/${process.getuid()}/podman/podman.sock` // User-specific Podman socket on Linux
+        ]
+    );
+    }
+
   for (const socketPath of defaultSocketPaths) {
-    if (checkDockerSocketAccess(socketPath)) {
+    if (checkDockerSocketAccess(socketPath)) {      
       return socketPath;
     }
   }
