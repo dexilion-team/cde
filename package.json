@@ -1,11 +1,9 @@
 {
   "name": "@dexilion/cde",
-  "version": "1.0.3",
+  "version": "1.0.4",
   "description": "Command line tool for Dexilion Common Line Development Environment",
   "main": "src/index.js",
-  "bin": {
-    "@dexilion/cde": "src/index.js"
-  },
+  "bin": "src/index.js",
   "type": "module",
   "author": {
     "name": "Dexilion Team",
@@ -15,5 +13,6 @@
     "type": "git",
     "url": "git+https://github.com/dexilion-team/cde.git"
   },
-  "license": "MIT"
+  "license": "MIT",
+  "packageManager": "yarn@1.22.22+sha512.a6b2f7906b721bba3d67d4aff083df04dad64c399707841b7acf00f6b133b7ac24255f2652fa22ae3534329dc6180534e98d17432037ff6fd140556e2bb3137e"
 }
