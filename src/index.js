@@ -2,9 +2,10 @@
 
 import { spawnSync, spawn } from "child_process";
 import { existsSync, readFileSync, writeFileSync } from "fs";
-import { join } from "path";
+import { join, dirname, resolve } from "path";
 import { homedir, networkInterfaces } from "os";
 import { createInterface } from "readline";
+import { fileURLToPath } from "url";
 
 /**
  * Returns a canonical os name for the current platform
@@ -385,6 +386,12 @@ function saveConfig(config) {
  * Builds the Docker image if it doesn't exist
  */
 async function buildDockerImage() {
+  const buildDirectory = findDockerBuildDirectory();
+  
+  if (!buildDirectory) {
+    throw new Error('❌ @dexilion/cde Dockerfile not found in current directory or any parent directories');
+  }
+  
   const buildArgs = [
     'build', '--no-cache', '-t', 'dexilion-cde', '-f', 'Dockerfile', '.'
   ];
@@ -402,6 +409,7 @@ async function buildDockerImage() {
   return new Promise((resolve, reject) => {
     // Try Docker first
     const dockerProcess = spawn('docker', buildArgs, {
+      cwd: buildDirectory,
       stdio: 'pipe'
     });
 
@@ -432,6 +440,7 @@ async function buildDockerImage() {
         }, 100);
 
         const podmanProcess = spawn('podman', buildArgs, {
+          cwd: buildDirectory,
           stdio: 'pipe'
         });
 
@@ -498,6 +507,7 @@ async function buildDockerImage() {
       }, 100);
 
       const podmanProcess = spawn('podman', buildArgs, {
+        cwd: buildDirectory,
         stdio: 'pipe'
       });
 
@@ -683,6 +693,45 @@ function isIPAvailable(ip) {
     // If there's an error running ping, assume IP is not available
     return false;
   }
+}
+
+/**
+ * Finds the directory containing the Dockerfile by walking up from the current script's directory
+ * @returns {string|null} - Absolute path to the directory containing Dockerfile, null if not found
+ */
+function findDockerBuildDirectory() {
+  // Get the directory of the current script
+  const __filename = fileURLToPath(import.meta.url);
+  const __dirname = dirname(__filename);
+  
+  let currentDir = resolve(__dirname);
+  const rootDir = resolve('/');
+  
+  while (currentDir !== rootDir) {
+    const dockerfilePath = join(currentDir, 'Dockerfile');
+    
+    if (existsSync(dockerfilePath)) {
+      return currentDir;
+    }
+    
+    // Move up one directory
+    const parentDir = dirname(currentDir);
+    
+    // Prevent infinite loop if dirname returns the same directory
+    if (parentDir === currentDir) {
+      break;
+    }
+    
+    currentDir = parentDir;
+  }
+  
+  // Check root directory as well
+  const rootDockerfilePath = join(rootDir, 'Dockerfile');
+  if (existsSync(rootDockerfilePath)) {
+    return rootDir;
+  }
+  
+  return null;
 }
 
 /**
